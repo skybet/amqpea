@@ -1,0 +1,15 @@
+{
+  "name": "amqpea",
+  "version": "0.0.0",
+  "description": "Easy Peasy AMQP",
+  "main": "amqpea.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "author": "Glen Mailer <glenjamin@gmail.com>",
+  "license": "BSD-3",
+  "dependencies": {
+    "async": "^0.9.0",
+    "bramqp": "^0.1.15"
+  }
+}

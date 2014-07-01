@@ -1,0 +1,2 @@
+# AMQPea
+AMQP made easy
