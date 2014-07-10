@@ -207,39 +207,39 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
         mutex(function(next) {
             handle.basic.publish(
                 num, exchange, key, !"mandatory", !"immediate",
-                next
+                onPublish
             );
-        }, onPublish);
-        function onPublish(err) {
-            if (err) return callback(err);
+            function onPublish(err) {
+                if (err) return next(err);
 
-            handle.content(
-                num,
-                'basic',
-                {
-                    'content-type': 'application/json'
-                },
-                JSON.stringify(body),
-                onContent
-            );
-        }
-        function onContent(err) {
-            if (err) return callback(err);
-
-            if (!confirm) return callback(err);
-
-            handle.on('basic.ack', confirmed);
-            handle.on('basic.nack', confirmed);
-        }
-        function confirmed(ch, method, data) {
-            handle.removeListener('basic.ack', confirmed);
-            handle.removeListener('basic.nack', confirmed);
-            if (method.name == 'ack') {
-                callback();
-            } else {
-                callback(new Error('Server rejected message'));
+                handle.content(
+                    num,
+                    'basic',
+                    {
+                        'content-type': 'application/json'
+                    },
+                    JSON.stringify(body),
+                    onContent
+                );
             }
-        }
+            function onContent(err) {
+                if (err) return next(err);
+
+                if (!confirm) return next(err);
+
+                handle.on('basic.ack', confirmed);
+                handle.on('basic.nack', confirmed);
+            }
+            function confirmed(ch, method, data) {
+                handle.removeListener('basic.ack', confirmed);
+                handle.removeListener('basic.nack', confirmed);
+                if (method.name == 'ack') {
+                    next();
+                } else {
+                    next(new Error('Server rejected message'));
+                }
+            }
+        }, callback);
     }
 };
 
