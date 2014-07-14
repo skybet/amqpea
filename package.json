@@ -10,6 +10,6 @@
   "license": "BSD-3",
   "dependencies": {
     "async": "^0.9.0",
-    "bramqp": "^0.1.15"
+    "bramqp": "0.1.17"
   }
 }
