@@ -204,6 +204,14 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
     }
 
     function publish(exchange, key, body, callback) {
+        if (!callback) {
+            if (confirm) {
+                throw new Error(
+                    'Must pass callback when using publisher confirmation');
+            }
+            callback = callback || noOp;
+        }
+
         mutex(function(next) {
             handle.basic.publish(
                 num, exchange, key, !"mandatory", !"immediate",
