@@ -382,6 +382,11 @@ function(queueName, prefetchCount) {
                 handle.basic.ack(num, tag, function(err) {
                     if (err) consumer.emit('error', err);
                 });
+            },
+            function reject(requeue) {
+                handle.basic.reject(num, tag, !!requeue, function(err) {
+                    if (err) consumer.emit('error', err);
+                });
             }
         );
         consumer.emit('message', msg);
@@ -398,11 +403,12 @@ function AMQPQueueConsumer(consumeFunction) {
     this.tag = null;
 }
 
-function AMQPMessage(delivery, properties, content, ack) {
+function AMQPMessage(delivery, properties, content, ack, reject) {
     this.delivery = delivery;
     this.properties = properties;
     this.content = content;
     this.ack = ack;
+    this.reject = reject;
 }
 AMQPMessage.prototype.fromJSON = function() {
     if (this.properties['content-type'] != 'application/json') {
@@ -412,6 +418,7 @@ AMQPMessage.prototype.fromJSON = function() {
     }
 };
 
+exports.mutex = asyncMutex;
 function asyncMutex() {
     var q = async.queue(worker, 1);
     function worker(fn, callback) {
