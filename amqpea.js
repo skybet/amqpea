@@ -259,7 +259,7 @@ AMQPConnection.prototype.declareQueue = function(options, callback) {
         options.name,
         !!options.passive,
         !!options.durable,
-        !!options.external,
+        !!options.exclusive,
         !!options.autoDelete,
         false, // no wait
         options.arguments || {},
