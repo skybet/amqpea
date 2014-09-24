@@ -360,7 +360,7 @@ function(queueName, prefetchCount) {
                     consumer.emit(err);
                 }
             );
-            handle.on('basic.consume-ok', function(ch, method, data) {
+            handle.once('basic.consume-ok', function(ch, method, data) {
                 consumer.tag = data.consumerTag;
                 next();
             });
