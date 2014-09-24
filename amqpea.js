@@ -24,7 +24,7 @@ function noOp(){}
 
 bramqp.selectSpecification('rabbitmq/full/amqp0-9-1.stripped.extended', noOp);
 
-module.exports = function createAMQP(uri, options) {
+exports = module.exports = function createAMQP(uri, options) {
     var server = parseAMQPUri(uri);
     return new AMQPConnection(server, options);
 };
@@ -37,7 +37,7 @@ function parseAMQPUri(uri) {
         port: parseInt(parsedUri.port, 10) || 5672,
         login: auth[0] || 'guest',
         password: auth[1] || 'guest',
-        vhost: decodeURIComponent(parsedUri.path.substring(1)) || '/',
+        vhost: decodeURIComponent(parsedUri.path.substring(1)) || '/'
     };
 }
 
@@ -104,9 +104,9 @@ function AMQPConnection(broker, options) {
     }
 }
 
-function setupSocket(amqp, host, port, heartbeat) {
+function setupSocket(amqp, host, port) {
     var socket = net.connect(port, host);
-    //socket.setTimeout(heartbeat * 2 * 1000);
+
     socket.on('timeout', function() {
         amqp.emit('error', new Error("Socket Timeout"));
     });
@@ -126,7 +126,7 @@ function attachDebugging(handle) {
         realMethod.apply(this, arguments);
     };
     var realContent = handle.content;
-    handle.content = function(ch, className, props, content, callback) {
+    handle.content = function(ch, className, props, content) {
         console.warn(
             "AMQP %d => %s %j - %s",
             ch, className, props, content
@@ -163,7 +163,7 @@ AMQPConnection.prototype.declareExchange = function(options, callback) {
             if (err) return callback(err);
         }
     );
-    this.handle.once('exchange.declare-ok', function(ch, method, data) {
+    this.handle.once('exchange.declare-ok', function() {
         callback();
     });
 };
@@ -238,7 +238,7 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
                 handle.on('basic.ack', confirmed);
                 handle.on('basic.nack', confirmed);
             }
-            function confirmed(ch, method, data) {
+            function confirmed(ch, method) {
                 handle.removeListener('basic.ack', confirmed);
                 handle.removeListener('basic.nack', confirmed);
                 if (method.name == 'ack') {
@@ -252,7 +252,6 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
 };
 
 AMQPConnection.prototype.declareQueue = function(options, callback) {
-    var amqp = this;
     var handle = this.handle;
     handle.queue.declare(
         1,
@@ -365,17 +364,17 @@ function(queueName, prefetchCount) {
                 next();
             });
         });
-        handle.on('basic.deliver', function(ch, method, data) {
+        handle.on('basic.deliver', function(ch, method, delivery) {
             if (ch != num) return;
             handle.once('content', function(ch, className, props, content) {
-                messageReceived(data, props, content);
+                messageReceived(delivery, props, content);
             });
         });
     }
-    function messageReceived(data, properties, content) {
-        var tag = data['delivery-tag'];
+    function messageReceived(delivery, properties, content) {
+        var tag = delivery['delivery-tag'];
         var msg = new AMQPMessage(
-            data,
+            delivery,
             properties,
             content,
             function ack() {
