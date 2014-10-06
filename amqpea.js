@@ -87,7 +87,7 @@ function AMQPConnection(broker, options) {
             if (data['reply-code'] != 200) {
                 err = new Error('AMQP Connection Closed ' + data['reply-text']);
                 err.code = data['reply-code'];
-                amqp.emit(err);
+                amqp.emit('error', err);
             }
             amqp.emit('close', !!err);
         });
@@ -96,7 +96,7 @@ function AMQPConnection(broker, options) {
                 var err = new Error(
                     'AMQP Connection Closed ' + data['reply-text']);
                 err.code = data['reply-code'];
-                amqp.emit(err);
+                amqp.emit('error', err);
             }
         });
         clearTimeout(timeout);
