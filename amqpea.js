@@ -1,10 +1,5 @@
 // Easy peasy amqp
-// TODO: extract, integration test and open source this.
-// http://fc00.deviantart.net/fs71/f/2010/017/6/5/Happy_Pea_by_FancyFerret.png
-// Goals
-//  * Simple API
-//  * API supports common use-cases cleanly
-//  * Would rather explode than miss an error
+// TODO: integration test and open source this.
 // Specific TODOs
 //  * Introduce channel abstraction
 //  * Scope errors to channels where possible
@@ -24,15 +19,17 @@ function noOp(){}
 
 var spec = 'rabbitmq/full/amqp0-9-1.stripped.extended';
 
-exports = module.exports = function createAMQP(uri, options) {
-    var server = parseAMQPUri(uri);
-    return new AMQPConnection(server, options);
+exports = module.exports = function createAMQP(uriOrUris, options) {
+    var servers = Array.isArray(uriOrUris) ?
+        uriOrUris.map(parseAMQPUri) : [parseAMQPUri(uriOrUris)];
+    return new AMQPConnection(servers, options);
 };
 
 function parseAMQPUri(uri) {
     var parsedUri = urllib.parse(uri);
     var auth = (parsedUri.auth || ':').split(':');
     return {
+        uri: uri,
         host: parsedUri.hostname || 'localhost',
         port: parseInt(parsedUri.port, 10) || 5672,
         login: auth[0] || 'guest',
@@ -42,55 +39,37 @@ function parseAMQPUri(uri) {
 }
 
 util.inherits(AMQPConnection, EE);
-function AMQPConnection(broker, options) {
+function AMQPConnection(servers, options) {
     var amqp = this;
 
+    amqp.uri = null;
     amqp.socket = null;
     amqp.handle = null;
     amqp.channelNum = 1;
 
-    var debug = options.debug || process.env.NODE_DEBUG_AMQP;
+    connectToFirst(
+        servers, options,
+        amqp.emit.bind(amqp, 'connection-error'),
+        onAMQPConnectionReady
+    );
 
-    var timeout = setTimeout(function() {
-        amqp.emit('error', new Error('Connection timed out'));
-        amqp.socket.destroy();
-    }, options.timeout || 30000);
-
-    if (debug) console.warn("Connecting to %s:%d", broker.host, broker.port);
-    amqp.socket = setupSocket(amqp, broker.host, broker.port);
-    amqp.socket.on('connect', function() {
-        if (debug) console.warn("Socket connected to %s:%d", broker.host, broker.port);
-    });
-    bramqp.initialize(amqp.socket, options.spec || spec, function(err, handle) {
-        if (err) {
-            return amqp.emit('error', err);
-        }
-        amqp.handle = handle;
-        handle.on('error', function(err) {
-            amqp.emit('error', err);
-        });
-        if (debug) {
-            attachDebugging(handle);
-        }
-        connection.openAMQPCommunication(
-            handle,
-            {
-                login: broker.login,
-                password: broker.password,
-                vhost: broker.vhost,
-                heartbeat: 'heartbeat' in options ? options.heartbeat : true,
-                client: options.client
-            },
-            onAMQPCommunicationOpen
-        );
-    });
-    function onAMQPCommunicationOpen(err) {
+    function onAMQPConnectionReady(err, uri, socket, handle) {
         if (err) return amqp.emit('error', err);
+
+        socket.on('error', amqp.emit.bind(amqp, 'error'));
+        socket.on('timeout',
+            amqp.emit.bind(amqp, 'error', new Error('Socket timeout')));
+        handle.on('error', amqp.emit.bind(amqp, 'error'));
+
+        amqp.uri = uri;
+        amqp.socket = socket;
+        amqp.handle = handle;
+
         // TODO: reify channel as a concept here later
         // TODO: channel flow control
-        amqp.handle.channel.open(1, function(err) {
+        handle.channel.open(1, function(err) {
             if (err) return amqp.emit('error', err);
-            amqp.handle.once('1:channel.open-ok', function() {
+            handle.once('1:channel.open-ok', function() {
                 onAMQPCommunicationReady();
             });
         });
@@ -115,21 +94,93 @@ function AMQPConnection(broker, options) {
                 amqp.emit('error', error);
             }
         });
-        clearTimeout(timeout);
         amqp.emit('ready');
     }
 }
 
-function setupSocket(amqp, host, port) {
-    var socket = net.connect(port, host);
+function connectToFirst(servers, options, notifyError, callback) {
 
-    socket.on('timeout', function() {
-        amqp.emit('error', new Error("Socket Timeout"));
+    var socket, handle, lastErr;
+
+    async.detectSeries(servers, function(server, next) {
+
+        connectToAMQP(server, options, function(err, _socket, _handle) {
+            if (err) {
+                notifyError(server.uri, err);
+                lastErr = err;
+                return next(false);
+            }
+
+            socket = _socket;
+            handle = _handle;
+            next(true);
+        });
+
+    }, function(server) {
+        if (!server) {
+            return callback(lastErr);
+        }
+        callback(null, server.uri, socket, handle);
     });
-    socket.on('error', function(err) {
-        amqp.emit('error', err);
+}
+
+function connectToAMQP(server, options, callback) {
+    var debug = options.debug || process.env.NODE_DEBUG_AMQP;
+
+    var timeout, socket, handle;
+
+    timeout = setTimeout(
+        async.apply(cleanupAndCallback, new Error('Connection timed out')),
+        options.timeout || 30000
+    );
+
+    if (debug) console.warn("Connecting to %s:%d", server.host, server.port);
+    socket = net.connect(server.port, server.host);
+    socket.on('timeout', socketTimeout);
+    function socketTimeout() {
+        cleanupAndCallback(new Error('Socket timed out'));
+    }
+    socket.on('error', cleanupAndCallback);
+    if (debug) {
+        socket.on('connect', function() {
+            console.warn("Socket connected to %s:%d", server.host, server.port);
+        });
+    }
+
+    bramqp.initialize(socket, options.spec || spec, function(err, _handle) {
+        if (err) {
+            return cleanupAndCallback(err);
+        }
+        handle = _handle;
+        handle.on('error', cleanupAndCallback);
+
+        if (debug) attachDebugging(handle);
+
+        connection.openAMQPCommunication(
+            handle,
+            {
+                login: server.login,
+                password: server.password,
+                vhost: server.vhost,
+                heartbeat: 'heartbeat' in options ? options.heartbeat : true,
+                client: options.client
+            },
+            cleanupAndCallback
+        );
     });
-    return socket;
+
+    function cleanupAndCallback(err) {
+        clearTimeout(timeout);
+        if (socket) {
+            if (err) socket.destroy();
+            socket.removeListener('timeout', socketTimeout);
+            socket.removeListener('error', cleanupAndCallback);
+        }
+        if (handle) {
+            handle.removeListener('error', cleanupAndCallback);
+        }
+        callback(err, socket, handle);
+    }
 }
 
 function attachDebugging(handle) {

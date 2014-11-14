@@ -1,8 +1,9 @@
+require('longjohn');
 var amqpea = require('..');
 
 var url = process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672/%2F';
 
-var amqp = amqpea(url, { timeout: 2000 });
+var amqp = amqpea(url, { timeout: 2000, debug: true });
 
 amqp.on('ready', function() {
 

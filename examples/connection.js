@@ -4,6 +4,7 @@ var amqpea = require('..');
 var url = process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672/%2F';
 
 var amqp = amqpea(url, {
+    debug: true,
     timeout: 2000,
     heartbeat: 20,
     client: {
