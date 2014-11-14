@@ -9,8 +9,6 @@
 //  * Introduce channel abstraction
 //  * Scope errors to channels where possible
 //  * Ensure reply listeners are scoped to correct channels
-//  * Support clientProperties on connection
-//  * Allow client-specified heartbeats
 
 var EE = require('events').EventEmitter;
 var net = require('net');
@@ -20,9 +18,11 @@ var util = require('util');
 var async = require('async');
 var bramqp = require('bramqp');
 
+var connection = require('./lib/connection');
+
 function noOp(){}
 
-bramqp.selectSpecification('rabbitmq/full/amqp0-9-1.stripped.extended', noOp);
+var spec = 'rabbitmq/full/amqp0-9-1.stripped.extended';
 
 exports = module.exports = function createAMQP(uri, options) {
     var server = parseAMQPUri(uri);
@@ -49,54 +49,70 @@ function AMQPConnection(broker, options) {
     amqp.handle = null;
     amqp.channelNum = 1;
 
-    // TODO: actually do this
-    var heartbeat = options.heartbeat || 10;
+    var debug = options.debug || process.env.NODE_DEBUG_AMQP;
 
     var timeout = setTimeout(function() {
         amqp.emit('error', new Error('Connection timed out'));
         amqp.socket.destroy();
     }, options.timeout || 30000);
 
-    amqp.socket = setupSocket(amqp, broker.host, broker.port, heartbeat);
+    if (debug) console.warn("Connecting to %s:%d", broker.host, broker.port);
+    amqp.socket = setupSocket(amqp, broker.host, broker.port);
     amqp.socket.on('connect', function() {
-        bramqp.initializeSocket(amqp.socket, function(err, handle) {
-            if (err) {
-                return amqp.emit('error', err);
-            }
-            amqp.handle = handle;
-            handle.on('error', function(err) {
-                amqp.emit('error', err);
-            });
-            if (process.env.NODE_DEBUG_AMQP) {
-                attachDebugging(handle);
-            }
-            handle.openAMQPCommunication(
-                broker.login, broker.password, 'heartbeat', broker.vhost,
-                onAMQPCommunicationReady
-            );
-        });
+        if (debug) console.warn("Socket connected to %s:%d", broker.host, broker.port);
     });
-    function onAMQPCommunicationReady(err) {
+    bramqp.initialize(amqp.socket, options.spec || spec, function(err, handle) {
         if (err) {
             return amqp.emit('error', err);
         }
+        amqp.handle = handle;
+        handle.on('error', function(err) {
+            amqp.emit('error', err);
+        });
+        if (debug) {
+            attachDebugging(handle);
+        }
+        connection.openAMQPCommunication(
+            handle,
+            {
+                login: broker.login,
+                password: broker.password,
+                vhost: broker.vhost,
+                heartbeat: 'heartbeat' in options ? options.heartbeat : true,
+                client: options.client
+            },
+            onAMQPCommunicationOpen
+        );
+    });
+    function onAMQPCommunicationOpen(err) {
+        if (err) return amqp.emit('error', err);
+        // TODO: reify channel as a concept here later
+        // TODO: channel flow control
+        amqp.handle.channel.open(1, function(err) {
+            if (err) return amqp.emit('error', err);
+            amqp.handle.once('1:channel.open-ok', function() {
+                onAMQPCommunicationReady();
+            });
+        });
+    }
+    function onAMQPCommunicationReady() {
         amqp.handle.on('connection.close', function(ch, method, data) {
             amqp.handle.connection['close-ok']();
             amqp.socket.end();
-            var err;
+            var error;
             if (data['reply-code'] != 200) {
-                err = new Error('AMQP Connection Closed ' + data['reply-text']);
-                err.code = data['reply-code'];
-                amqp.emit('error', err);
+                error = new Error('AMQP Connection Closed ' + data['reply-text']);
+                error.code = data['reply-code'];
+                amqp.emit('error', error);
             }
-            amqp.emit('close', !!err);
+            amqp.emit('close', !!error);
         });
         amqp.handle.on('channel.close', function(ch, method, data) {
             if (data['reply-code'] != 200) {
-                var err = new Error(
+                var error = new Error(
                     'AMQP Connection Closed ' + data['reply-text']);
-                err.code = data['reply-code'];
-                amqp.emit('error', err);
+                error.code = data['reply-code'];
+                amqp.emit('error', error);
             }
         });
         clearTimeout(timeout);
@@ -117,10 +133,15 @@ function setupSocket(amqp, host, port) {
 }
 
 function attachDebugging(handle) {
+    var realHeartbeat = handle.heartbeat;
+    handle.heartbeat = function() {
+        console.warn("AMQP to ❤");
+        realHeartbeat.apply(this, arguments);
+    };
     var realMethod = handle.method;
     handle.method = function(ch, className, method, args) {
         console.warn(
-            "AMQP %d > %s.%s: %j",
+            "AMQP to %d %s.%s %j",
             ch, className, method, args
         );
         realMethod.apply(this, arguments);
@@ -128,24 +149,27 @@ function attachDebugging(handle) {
     var realContent = handle.content;
     handle.content = function(ch, className, props, content) {
         console.warn(
-            "AMQP %d => %s %j - %s",
+            "AMQP to %d %s %j - %s",
             ch, className, props, content
         );
         realContent.apply(this, arguments);
     };
+    // Disabled because it's too spammy
+    // handle.on('heartbeat', function() {
+    //     console.warn("AMQP ❤ in");
+    // });
     handle.on('method', function(ch, className, method, data) {
         console.warn(
-            "AMQP %d < %s.%s: %j",
+            "AMQP %d in %s.%s %j",
             ch, className, method.name, data
         );
     });
     handle.on('content', function(ch, className, props, content) {
         console.warn(
-            "AMQP %d <= %s %j - %s",
+            "AMQP %d in %s %j - %s",
             ch, className, props, content
         );
     });
-
 }
 
 AMQPConnection.prototype.declareExchange = function(options, callback) {
