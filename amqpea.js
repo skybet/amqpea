@@ -1,6 +1,7 @@
 // Easy peasy amqp
 // TODO: integration test and open source this.
 // Specific TODOs
+//  * auto-bind all methods to their instance
 //  * Introduce channel abstraction
 //  * Scope errors to channels where possible
 //  * Ensure reply listeners are scoped to correct channels
@@ -407,7 +408,7 @@ function(queueName, prefetchCount) {
 
     return consumer;
 
-    function consume(ack, exclusive, messageHandler) {
+    function consume(ack, exclusive, handler) {
         if (ack && !prefetchCount && prefetchCount !== 0) {
             consumer.emit('error', new Error(
                 'Attempted to enable acknowledgement on a queue consumer ' +
@@ -416,8 +417,8 @@ function(queueName, prefetchCount) {
                 'explicitly'
             ));
         }
-        if (messageHandler) {
-            consumer.on('message', messageHandler);
+        if (handler) {
+            consumer.on('message', handler);
         }
         mutex(function(next) {
             handle.basic.consume(
