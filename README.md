@@ -77,6 +77,10 @@ function beginPublishing() {
 }
 ```
 
+## Examples
+
+More examples can be found in the [examples](./examples) folder.
+
 ## API Docs
 
 Most of these options correspond directly to an AMQP protocol concept, for more information see the [AMQP 0.9.1 reference](http://www.rabbitmq.com/amqp-0-9-1-reference.html).
@@ -228,3 +232,23 @@ Acknowledge the message with the server.
 #### msg.ack()
 
 Reject the message with the server.
+
+
+## Running the Tests
+
+To run the tests you will need a local AMQP server. The testsuite talks to the broker as well as via the HTTP admin API.
+
+There are environment variables to set which tell the test runner how to connect.
+
+* `AMQP_USERNAME` defaults to "guest"
+* `AMQP_PASSWORD` defaults to "guest"
+* `AMQP_HOSTNAME` defaults to "localhost"
+* `AMQP_PORT` defaults to 5672
+* `AMQP_VHOST` defaults to "/"
+* `AMQP_ADMIN_PORT` defaults to 15672
+
+With the appropriate variables set, use npm to run the testsuite.
+
+```sh
+npm test
+```

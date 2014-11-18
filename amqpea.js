@@ -70,9 +70,9 @@ function AMQPConnection(servers, options) {
         // TODO: channel flow control
         handle.channel.open(1, function(err) {
             if (err) return amqp.emit('error', err);
-            handle.once('1:channel.open-ok', function() {
-                onAMQPCommunicationReady();
-            });
+        });
+        handle.once('1:channel.open-ok', function() {
+            onAMQPCommunicationReady();
         });
     }
     function onAMQPCommunicationReady() {
@@ -136,7 +136,7 @@ function connectToAMQP(server, options, callback) {
     );
 
     if (debug) console.warn("Connecting to %s:%d", server.host, server.port);
-    socket = net.connect(server.port, server.host);
+    socket = net.connect({host: server.host, port: server.port});
     socket.on('timeout', socketTimeout);
     function socketTimeout() {
         cleanupAndCallback(new Error('Socket timed out'));
@@ -222,6 +222,11 @@ function attachDebugging(handle) {
             ch, className, props, content
         );
     });
+    var realOn = handle.on;
+    handle.on = function(event) {
+        console.warn("AMQP listener attached for %j", event);
+        realOn.apply(this, arguments);
+    };
 }
 
 AMQPConnection.prototype.declareExchange = function(options, callback) {
@@ -469,7 +474,14 @@ function(queueName, prefetchCount) {
 };
 
 AMQPConnection.prototype.close = function(callback) {
-    this.handle.closeAMQPCommunication(callback || noOp);
+    callback = callback || noOp;
+    this.handle.connection.close(function(err) {
+        if (err) return callback(err);
+    });
+    var socket = this.socket;
+    this.handle.once('connection.close-ok', function() {
+        socket.end(callback);
+    });
 };
 
 util.inherits(AMQPQueueConsumer, EE);
