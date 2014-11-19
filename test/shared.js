@@ -43,6 +43,36 @@ afterEach(function(done) {
     connections = [];
 });
 
+var client = require('request');
+exports.admin = function(path, callback) {
+    client({
+        uri: urllib.format({
+            protocol: "http",
+            hostname: hostname,
+            port: admin,
+            pathname: path
+        }),
+        json: true,
+        auth: { username: login, password: password }
+    }, function(err, res, body) {
+        callback(err, body, res);
+    });
+};
+exports.adminConnectionInfo = function (amqp, callback) {
+    var outgoingPort = amqp.socket.localPort;
+    exports.admin("/api/connections", function(err, connections) {
+        if (err) return callback(err);
+
+        var connection = connections.filter(function(conn) {
+            return conn.peer_port == outgoingPort;
+        })[0];
+
+        if (!connection) return callback(new Error('Connection not found'));
+
+        callback(null, connection);
+    });
+};
+
 function testConnection(hostname, port, callback) {
     var socket = net.connect({host: hostname, port: port});
     socket.on('connect', function() {

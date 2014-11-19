@@ -95,7 +95,8 @@ function AMQPConnection(servers, options) {
                 amqp.emit('error', error);
             }
         });
-        amqp.emit('ready');
+        // Ensure exceptions in 'ready' handlers don't blow the parser up
+        setImmediate(amqp.emit.bind(amqp, 'ready'));
     }
 }
 
