@@ -4,7 +4,7 @@
   "description": "Easy Peasy AMQP",
   "main": "amqpea.js",
   "scripts": {
-    "test": "echo 'TODO'",
+    "test": "mocha",
     "lint": "eslint ."
   },
   "author": "Glen Mailer <glenjamin@gmail.com>",
@@ -14,7 +14,11 @@
     "bramqp": "^0.2.2"
   },
   "devDependencies": {
+    "chai": "^1.10.0",
     "eslint": "^0.9.2",
-    "longjohn": "^0.2.4"
+    "longjohn": "^0.2.4",
+    "mocha": "^2.0.1",
+    "sinon": "^1.10.2",
+    "request": "^2.33.0"
   }
 }

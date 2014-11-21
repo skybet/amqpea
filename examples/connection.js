@@ -5,7 +5,7 @@ var url = process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672/%2F';
 
 var amqp = amqpea(url, {
     debug: true,
-    timeout: 2000,
+    timeout: 5000,
     heartbeat: 20,
     client: {
         product: "clientProperties-test-client",
@@ -18,6 +18,14 @@ var amqp = amqpea(url, {
 
 amqp.on('ready', function() {
 
-    console.log("Connected and waiting to be killed...");
+    console.log("Connected ...");
+
+    setTimeout(function() {
+        console.log("Closing connection...");
+
+        amqp.close(function() {
+            console.log("Connection closed.");
+        });
+    }, 2000);
 
 });

@@ -1,6 +1,7 @@
 // Easy peasy amqp
 // TODO: integration test and open source this.
 // Specific TODOs
+//  * auto-bind all methods to their instance
 //  * Introduce channel abstraction
 //  * Scope errors to channels where possible
 //  * Ensure reply listeners are scoped to correct channels
@@ -69,9 +70,9 @@ function AMQPConnection(servers, options) {
         // TODO: channel flow control
         handle.channel.open(1, function(err) {
             if (err) return amqp.emit('error', err);
-            handle.once('1:channel.open-ok', function() {
-                onAMQPCommunicationReady();
-            });
+        });
+        handle.once('1:channel.open-ok', function() {
+            onAMQPCommunicationReady();
         });
     }
     function onAMQPCommunicationReady() {
@@ -94,7 +95,8 @@ function AMQPConnection(servers, options) {
                 amqp.emit('error', error);
             }
         });
-        amqp.emit('ready');
+        // Ensure exceptions in 'ready' handlers don't blow the parser up
+        setImmediate(amqp.emit.bind(amqp, 'ready'));
     }
 }
 
@@ -135,7 +137,7 @@ function connectToAMQP(server, options, callback) {
     );
 
     if (debug) console.warn("Connecting to %s:%d", server.host, server.port);
-    socket = net.connect(server.port, server.host);
+    socket = net.connect({host: server.host, port: server.port});
     socket.on('timeout', socketTimeout);
     function socketTimeout() {
         cleanupAndCallback(new Error('Socket timed out'));
@@ -221,6 +223,11 @@ function attachDebugging(handle) {
             ch, className, props, content
         );
     });
+    var realOn = handle.on;
+    handle.on = function(event) {
+        console.warn("AMQP listener attached for %j", event);
+        realOn.apply(this, arguments);
+    };
 }
 
 AMQPConnection.prototype.declareExchange = function(options, callback) {
@@ -407,7 +414,7 @@ function(queueName, prefetchCount) {
 
     return consumer;
 
-    function consume(ack, exclusive, messageHandler) {
+    function consume(ack, exclusive, handler) {
         if (ack && !prefetchCount && prefetchCount !== 0) {
             consumer.emit('error', new Error(
                 'Attempted to enable acknowledgement on a queue consumer ' +
@@ -416,8 +423,8 @@ function(queueName, prefetchCount) {
                 'explicitly'
             ));
         }
-        if (messageHandler) {
-            consumer.on('message', messageHandler);
+        if (handler) {
+            consumer.on('message', handler);
         }
         mutex(function(next) {
             handle.basic.consume(
@@ -468,7 +475,14 @@ function(queueName, prefetchCount) {
 };
 
 AMQPConnection.prototype.close = function(callback) {
-    this.handle.closeAMQPCommunication(callback || noOp);
+    callback = callback || noOp;
+    this.handle.connection.close(function(err) {
+        if (err) return callback(err);
+    });
+    var socket = this.socket;
+    this.handle.once('connection.close-ok', function() {
+        socket.end(callback);
+    });
 };
 
 util.inherits(AMQPQueueConsumer, EE);
