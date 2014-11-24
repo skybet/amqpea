@@ -10,6 +10,8 @@ var hostname = process.env.AMQP_HOSTNAME || "localhost";
 var port = parseInt(process.env.AMQP_PORT, 10) || 5672;
 var vhost = process.env.AMQP_VHOST || "/";
 var admin = parseInt(process.env.AMQP_ADMIN_PORT, 10) || 15672;
+var adminProto = process.env.AMQP_ADMIN_PROTO || "http";
+var adminSSLInsecure = !!process.env.AMQP_ADMIN_SSL_INSECURE;
 
 var uriData = {
     protocol: 'amqp',
@@ -47,12 +49,13 @@ var client = require('request');
 exports.admin = function(path, callback) {
     client({
         uri: urllib.format({
-            protocol: "http",
+            protocol: adminProto,
             hostname: hostname,
             port: admin,
             pathname: path
         }),
         json: true,
+        strictSSL: !adminSSLInsecure,
         auth: { username: login, password: password }
     }, function(err, res, body) {
         callback(err, body, res);

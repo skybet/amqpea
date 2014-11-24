@@ -246,6 +246,8 @@ There are environment variables to set which tell the test runner how to connect
 * `AMQP_PORT` defaults to 5672
 * `AMQP_VHOST` defaults to "/"
 * `AMQP_ADMIN_PORT` defaults to 15672
+* `AMQP_ADMIN_PROTO` defaults to "http"
+* `AMQP_ADMIN_SSL_INSECURE` defaults to false
 
 With the appropriate variables set, use npm to run the testsuite.
 
