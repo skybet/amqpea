@@ -1,10 +1,12 @@
 # AMQPea
 AMQP made easy
 
-<!--
+[![npm version](https://img.shields.io/npm/v/amqpea.svg)](https://www.npmjs.com/package/amqpea) [![Build Status](https://img.shields.io/travis/skybet/amqpea/master.svg)](https://travis-ci.org/skybet/amqpea) ![BSD-3 Licensed](https://img.shields.io/npm/l/amqpea.svg)
+
+
 ![Happy Pea](http://glenjamin.co.uk/chatzilla/misc/happy-pea.png)
+
 "Happy Pea" Copyright [FancyFerret on DeviantArt](http://fancyferret.deviantart.com/art/Happy-Pea-150776948)
--->
 
 ## Goals
 
