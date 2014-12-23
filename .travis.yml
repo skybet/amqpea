@@ -1,0 +1,9 @@
+language: node_js
+node_js:
+  - "0.10"
+  - "0.11"
+sudo: false
+services:
+  - rabbitmq
+before_script:
+  - curl localhost:15672/api/overview -u guest:guest | python -m json.tool

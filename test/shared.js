@@ -29,7 +29,14 @@ exports.brokenUri2 = urllib.format(
     copy(uriData, { hostname: 'lfg' + hostname }));
 
 before(function(done) {
-    async.map([port, admin], async.apply(testConnection, hostname), done);
+    async.map(
+        [port, admin],
+        async.apply(testConnection, hostname),
+        function(err) {
+            console.warn("");
+            done(err);
+        }
+    );
 });
 
 var connections = [];
@@ -40,7 +47,7 @@ exports.deferCleanup = function deferCleanup(amqp) {
 };
 afterEach(function(done) {
     async.each(connections, function(amqp, next) {
-        amqp.close(next);
+        amqp.close(function(){ next(); });
     }, done);
     connections = [];
 });
@@ -77,12 +84,20 @@ exports.adminConnectionInfo = function (amqp, callback) {
 };
 
 function testConnection(hostname, port, callback) {
+    console.warn("Testing connection to %s:%d", hostname, port);
     var socket = net.connect({host: hostname, port: port});
     socket.on('connect', function() {
-        socket.end();
+        console.warn("Connection %s:%d connected", hostname, port);
+        socket.destroy();
         callback();
     });
-    socket.on('error', callback);
+    socket.on('error', function(err) {
+        console.warn(
+            "Error connecting to %s:%d - %s",
+            hostname, port, err.stack
+        );
+        callback(err);
+    });
 }
 
 function copy(a, b) {
