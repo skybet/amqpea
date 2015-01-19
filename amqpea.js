@@ -20,6 +20,8 @@ function noOp(){}
 
 var spec = 'rabbitmq/full/amqp0-9-1.stripped.extended';
 
+var connectionCounter = 1;
+
 exports = module.exports = function createAMQP(uriOrUris, options) {
     var servers = Array.isArray(uriOrUris) ?
         uriOrUris.map(parseAMQPUri) : [parseAMQPUri(uriOrUris)];
@@ -129,7 +131,7 @@ function connectToFirst(servers, options, notifyError, callback) {
 
 function connectToAMQP(server, options, callback) {
     var debug = options.debug || process.env.NODE_DEBUG_AMQP;
-    var console = prefixedConsole(options.logPrefix);
+    var conNum = connectionCounter++;
 
     var timeout, socket, handle;
 
@@ -138,7 +140,7 @@ function connectToAMQP(server, options, callback) {
         options.timeout || 30000
     );
 
-    if (debug) console.warn("Connecting to %s:%d", server.host, server.port);
+    if (debug) console.warn("%s: AMQP Connecting to %s:%d", conNum, server.host, server.port);
     socket = net.connect({host: server.host, port: server.port});
     socket.on('timeout', socketTimeout);
     function socketTimeout() {
@@ -147,7 +149,7 @@ function connectToAMQP(server, options, callback) {
     socket.on('error', cleanupAndCallback);
     if (debug) {
         socket.on('connect', function() {
-            console.warn("Socket connected to %s:%d", server.host, server.port);
+            console.warn("%s: AMQP Socket connected to %s:%d", conNum, server.host, server.port);
         });
     }
 
@@ -158,7 +160,7 @@ function connectToAMQP(server, options, callback) {
         handle = _handle;
         handle.on('error', cleanupAndCallback);
 
-        if (debug) attachDebugging(handle, console);
+        if (debug) attachDebugging(handle, conNum);
 
         connection.openAMQPCommunication(
             handle,
@@ -187,25 +189,25 @@ function connectToAMQP(server, options, callback) {
     }
 }
 
-function attachDebugging(handle, console) {
+function attachDebugging(handle, conNum) {
     var realHeartbeat = handle.heartbeat;
     handle.heartbeat = function() {
-        console.warn("AMQP to ❤");
+        console.warn("%s: AMQP to ❤", conNum);
         realHeartbeat.apply(this, arguments);
     };
     var realMethod = handle.method;
     handle.method = function(ch, className, method, args) {
         console.warn(
-            "AMQP to %d %s.%s %j",
-            ch, className, method, args
+            "%s: AMQP to %d %s.%s %j",
+            conNum, ch, className, method, args
         );
         realMethod.apply(this, arguments);
     };
     var realContent = handle.content;
     handle.content = function(ch, className, props, content) {
         console.warn(
-            "AMQP to %d %s %j - %s",
-            ch, className, props, content
+            "%s: AMQP to %d %s %j - %s",
+            conNum, ch, className, props, content
         );
         realContent.apply(this, arguments);
     };
@@ -215,19 +217,19 @@ function attachDebugging(handle, console) {
     // });
     handle.on('method', function(ch, className, method, data) {
         console.warn(
-            "AMQP %d in %s.%s %j",
-            ch, className, method.name, data
+            "%s: AMQP %d in %s.%s %j",
+            conNum, ch, className, method.name, data
         );
     });
     handle.on('content', function(ch, className, props, content) {
         console.warn(
-            "AMQP %d in %s %j - %s",
-            ch, className, props, content
+            "%s: AMQP %d in %s %j - %s",
+            conNum, ch, className, props, content
         );
     });
     var realOn = handle.on;
     handle.on = function(event) {
-        console.warn("AMQP listener attached for %j", event);
+        console.warn("%s: AMQP listener attached for %j", conNum, event);
         realOn.apply(this, arguments);
     };
 }
@@ -517,20 +519,4 @@ function asyncMutex() {
     return function(fn, callback) {
         q.push(fn, callback);
     };
-}
-
-function prefixedConsole(prefix) {
-    return {
-        'warn': function(message) {
-            prefixed('warn', arguments);
-        }
-    };
-
-    function prefixed(type, args) {
-        if (prefix) {
-            args[0] = '[' + prefix + '] ' + args[0];
-        }
-
-        console[type].apply(console, args);
-    }
 }
