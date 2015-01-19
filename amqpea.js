@@ -372,7 +372,7 @@ AMQPConnection.prototype.declareQueue = function(options, callback) {
             });
         }
 
-        async.forEach(options.binding.keys, bindKey, function(err) {
+        async.forEachSeries(options.binding.keys, bindKey, function(err) {
             if (err) return callback(err);
             callback(null, createQueue());
         });
