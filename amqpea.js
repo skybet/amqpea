@@ -129,6 +129,7 @@ function connectToFirst(servers, options, notifyError, callback) {
 
 function connectToAMQP(server, options, callback) {
     var debug = options.debug || process.env.NODE_DEBUG_AMQP;
+    var console = prefixedConsole(options.logPrefix);
 
     var timeout, socket, handle;
 
@@ -157,7 +158,7 @@ function connectToAMQP(server, options, callback) {
         handle = _handle;
         handle.on('error', cleanupAndCallback);
 
-        if (debug) attachDebugging(handle);
+        if (debug) attachDebugging(handle, console);
 
         connection.openAMQPCommunication(
             handle,
@@ -186,7 +187,7 @@ function connectToAMQP(server, options, callback) {
     }
 }
 
-function attachDebugging(handle) {
+function attachDebugging(handle, console) {
     var realHeartbeat = handle.heartbeat;
     handle.heartbeat = function() {
         console.warn("AMQP to ❤");
@@ -516,4 +517,20 @@ function asyncMutex() {
     return function(fn, callback) {
         q.push(fn, callback);
     };
+}
+
+function prefixedConsole(prefix) {
+    return {
+        'warn': function(message) {
+            prefixed('warn', arguments);
+        }
+    };
+
+    function prefixed(type, args) {
+        if (prefix) {
+            args[0] = '[' + prefix + '] ' + args[0];
+        }
+
+        console[type].apply(console, args);
+    }
 }
