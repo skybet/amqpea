@@ -47,4 +47,35 @@ describe("pubsub", function() {
         }
     });
 
+    it("should receive confirmed published messages", function(done) {
+
+        var messages = [];
+        var consumer = amqp.createQueueConsumerChannel('qq');
+        consumer.consume(!'ack', 'exclusive', function(msg) {
+            messages.push(msg);
+            checkIfDone();
+        });
+
+        var confirms = 0;
+        function confirm(err) {
+            if (err) throw err;
+            confirms += 1;
+        }
+        var publisher = amqp.createPublishChannel('confirm');
+        publisher.publish('xxx', 'key.1', { message: "body1" }, confirm);
+        publisher.publish('xxx', 'key.2', { message: "body2" }, confirm);
+
+        function checkIfDone() {
+            if (messages.length < 2) return;
+            assert.equal(confirms, 2, "Expected 2 publish confirms");
+            var msg1 = messages.shift();
+            assert.deepPropertyVal(msg1, 'delivery.routing-key', 'key.1');
+            assert.deepEqual(msg1.fromJSON(), { message: "body1" });
+            var msg2 = messages.shift();
+            assert.deepPropertyVal(msg2, 'delivery.routing-key', 'key.2');
+            assert.deepEqual(msg2.fromJSON(), { message: "body2" });
+            done();
+        }
+    });
+
 });
