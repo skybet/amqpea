@@ -80,7 +80,9 @@ function AMQPConnection(servers, options) {
     }
     function onAMQPCommunicationReady() {
         amqp.handle.on('connection.close', function(ch, method, data) {
-            amqp.handle.connection['close-ok']();
+            amqp.handle.connection['close-ok'](function(err) {
+                amqp.emit('error', err);
+            });
             amqp.socket.end();
             var error;
             if (data['reply-code'] != 200) {
@@ -206,7 +208,7 @@ function attachDebugging(handle, conNum) {
     var realContent = handle.content;
     handle.content = function(ch, className, props, content) {
         console.warn(
-            "%s:AMQP to %d %s %j - %s",
+            "%s:AMQP to %d.content %s %j - %s",
             conNum, ch, className, props, content
         );
         realContent.apply(this, arguments);
@@ -223,7 +225,7 @@ function attachDebugging(handle, conNum) {
     });
     handle.on('content', function(ch, className, props, content) {
         console.warn(
-            "%s:AMQP %d in %s %j - %s",
+            "%s:AMQP %d in %s.content %j - %s",
             conNum, ch, className, props, content
         );
     });
@@ -244,7 +246,7 @@ AMQPConnection.prototype.declareExchange = function(options, callback) {
         !!options.autoDelete,
         !!options.internal,
         false, // no wait
-        {}, // misc arguments
+        options.arguments || {},
         function(err) {
             if (err) return callback(err);
         }
@@ -480,12 +482,13 @@ function(queueName, prefetchCount) {
 
 AMQPConnection.prototype.close = function(callback) {
     callback = callback || noOp;
+    var amqp = this;
     this.handle.connection.close(function(err) {
         if (err) return callback(err);
     });
-    var socket = this.socket;
     this.handle.once('connection.close-ok', function() {
-        socket.end(callback);
+        amqp.socket.end(callback);
+        amqp.emit('close');
     });
 };
 
