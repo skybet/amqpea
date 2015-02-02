@@ -70,4 +70,11 @@ describe("connecting", function() {
             done();
         });
     });
+    it("can close after connection", function(done) {
+        var amqp = amqpea(shared.uri, {});
+        amqp.on('error', done);
+        amqp.on('ready', function() {
+            amqp.close(done);
+        });
+    });
 });

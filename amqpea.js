@@ -80,7 +80,9 @@ function AMQPConnection(servers, options) {
     }
     function onAMQPCommunicationReady() {
         amqp.handle.on('connection.close', function(ch, method, data) {
-            amqp.handle.connection['close-ok']();
+            amqp.handle.connection['close-ok'](function(err) {
+                amqp.emit('error', err);
+            });
             amqp.socket.end();
             var error;
             if (data['reply-code'] != 200) {
@@ -206,7 +208,7 @@ function attachDebugging(handle, conNum) {
     var realContent = handle.content;
     handle.content = function(ch, className, props, content) {
         console.warn(
-            "%s:AMQP to %d %s %j - %s",
+            "%s:AMQP to %d.content %s %j - %s",
             conNum, ch, className, props, content
         );
         realContent.apply(this, arguments);
@@ -223,7 +225,7 @@ function attachDebugging(handle, conNum) {
     });
     handle.on('content', function(ch, className, props, content) {
         console.warn(
-            "%s:AMQP %d in %s %j - %s",
+            "%s:AMQP %d in %s.content %j - %s",
             conNum, ch, className, props, content
         );
     });
@@ -244,7 +246,7 @@ AMQPConnection.prototype.declareExchange = function(options, callback) {
         !!options.autoDelete,
         !!options.internal,
         false, // no wait
-        {}, // misc arguments
+        options.arguments || {},
         function(err) {
             if (err) return callback(err);
         }
@@ -264,12 +266,12 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
             if (err) return next(err);
         });
 
-        handle.once('channel.open-ok', function() {
+        handle.once(num + ':channel.open-ok', function() {
             if (!confirm) return next();
             handle.confirm.select(num, false, function(err) {
                 if (err) return next(err);
             });
-            handle.once('confirm.select-ok', function() {
+            handle.once(num + ':confirm.select-ok', function() {
                 next();
             });
         });
@@ -283,13 +285,22 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
     function close(callback) {
         mutex(function(next) {
             handle.channel.close(num);
-            handle.once('channel.close-ok', function() {
+            handle.once(num + ':channel.close-ok', function() {
                 next();
             });
         }, callback);
     }
 
-    function publish(exchange, key, body, callback) {
+    function publish(exchange, key, body, properties, callback) {
+
+        // accept properties, or callback, or both
+        if (callback === undefined && typeof properties === 'function') {
+            callback = properties;
+            properties = {};
+        } else {
+            properties = properties || {};
+        }
+
         if (!callback) {
             if (confirm) {
                 throw new Error(
@@ -309,9 +320,9 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
                 handle.content(
                     num,
                     'basic',
-                    {
+                    buildProperties(properties, {
                         'content-type': 'application/json'
-                    },
+                    }),
                     JSON.stringify(body),
                     onContent
                 );
@@ -321,12 +332,12 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
 
                 if (!confirm) return next(err);
 
-                handle.on('basic.ack', confirmed);
-                handle.on('basic.nack', confirmed);
+                handle.on(num + ':basic.ack', confirmed);
+                handle.on(num + ':basic.nack', confirmed);
             }
             function confirmed(ch, method) {
-                handle.removeListener('basic.ack', confirmed);
-                handle.removeListener('basic.nack', confirmed);
+                handle.removeListener(num + ':basic.ack', confirmed);
+                handle.removeListener(num + ':basic.nack', confirmed);
                 if (method.name == 'ack') {
                     next();
                 } else {
@@ -336,6 +347,36 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
         }, callback);
     }
 };
+
+/**
+ * @see http://www.rabbitmq.com/amqp-0-9-1-reference.html#class.basic
+ * shortstr     content-type        MIME content type.
+ * shortstr     content-encoding    MIME content encoding.
+ * table        headers             Message header field table.
+ * octet        delivery-mode       Non-persistent (1) or persistent (2).
+ * octet        priority            Message priority, 0 to 9.
+ * shortstr     correlation-id      Application correlation identifier.
+ * shortstr     reply-to            Address to reply to.
+ * shortstr     expiration          Message expiration specification.
+ * shortstr     message-id          Application message identifier.
+ * timestamp    timestamp           Message timestamp.
+ * shortstr     type                Message type name.
+ * shortstr     user-id             Creating user id.
+ * shortstr     app-id              Creating application id.
+ */
+function buildProperties(properties, overrides) {
+    var built = copy(properties, overrides);
+    if (properties.headers) {
+        built.headers = {};
+        Object.keys(properties.headers || {}).forEach(function(k) {
+            built.headers[k] = {
+                type: 'Long string',
+                data: properties.headers[k]
+            };
+        });
+    }
+    return built;
+}
 
 AMQPConnection.prototype.declareQueue = function(options, callback) {
     var handle = this.handle;
@@ -352,7 +393,7 @@ AMQPConnection.prototype.declareQueue = function(options, callback) {
             if (err) return callback(err);
         }
     );
-    handle.once('queue.declare-ok', function(ch, method, data) {
+    handle.once('1:queue.declare-ok', function(ch, method, data) {
         if (!options.binding) return callback(null, createQueue());
 
         function bindKey(key, next) {
@@ -367,7 +408,7 @@ AMQPConnection.prototype.declareQueue = function(options, callback) {
                     if (err) next(err);
                 }
             );
-            handle.once('queue.bind-ok', function() {
+            handle.once('1:queue.bind-ok', function() {
                 next();
             });
         }
@@ -398,7 +439,7 @@ function(queueName, prefetchCount) {
             if (err) return next(err);
         });
 
-        handle.once('channel.open-ok', function() {
+        handle.once(num + ':channel.open-ok', function() {
             next();
         });
     });
@@ -408,7 +449,7 @@ function(queueName, prefetchCount) {
             handle.basic.qos(num, 0, prefetchCount, false, function(err) {
                 if (err) return next(err);
             });
-            handle.once('basic.qos-ok', function() {
+            handle.once(num + ':basic.qos-ok', function() {
                 next();
             });
         });
@@ -445,13 +486,12 @@ function(queueName, prefetchCount) {
                     consumer.emit(err);
                 }
             );
-            handle.once('basic.consume-ok', function(ch, method, data) {
+            handle.once(num + ':basic.consume-ok', function(ch, method, data) {
                 consumer.tag = data.consumerTag;
                 next();
             });
         });
-        handle.on('basic.deliver', function(ch, method, delivery) {
-            if (ch != num) return;
+        handle.on(num + ':basic.deliver', function(ch, method, delivery) {
             handle.once('content', function(ch, className, props, content) {
                 messageReceived(delivery, props, content);
             });
@@ -480,12 +520,13 @@ function(queueName, prefetchCount) {
 
 AMQPConnection.prototype.close = function(callback) {
     callback = callback || noOp;
+    var amqp = this;
     this.handle.connection.close(function(err) {
         if (err) return callback(err);
     });
-    var socket = this.socket;
     this.handle.once('connection.close-ok', function() {
-        socket.end(callback);
+        amqp.socket.end(callback);
+        amqp.emit('close');
     });
 };
 
@@ -509,6 +550,13 @@ AMQPMessage.prototype.fromJSON = function() {
         return JSON.parse(this.content);
     }
 };
+
+function copy(a, b) {
+    var r = {};
+    Object.keys(a).forEach(function(k) { r[k] = a[k]; });
+    Object.keys(b).forEach(function(k) { r[k] = b[k]; });
+    return r;
+}
 
 exports.mutex = asyncMutex;
 function asyncMutex() {

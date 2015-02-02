@@ -54,6 +54,6 @@ describe("client information", function() {
                 done();
             });
         });
-    })
+    });
 
 });
