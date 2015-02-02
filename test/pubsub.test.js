@@ -35,8 +35,10 @@ describe("pubsub", function() {
         var publisher = amqp.createPublishChannel();
         publisher.publish('xxx', 'key.1', { message: "body1" });
         publisher.publish('xxx', 'key.2', { message: "body2" });
+
         function checkIfDone() {
             if (messages.length < 2) return;
+
             var msg1 = messages.shift();
             assert.deepPropertyVal(msg1, 'delivery.routing-key', 'key.1');
             assert.deepEqual(msg1.fromJSON(), { message: "body1" });
@@ -60,6 +62,7 @@ describe("pubsub", function() {
         function confirm(err) {
             if (err) throw err;
             confirms += 1;
+            checkIfDone();
         }
         var publisher = amqp.createPublishChannel('confirm');
         publisher.publish('xxx', 'key.1', { message: "body1" }, confirm);
@@ -67,13 +70,78 @@ describe("pubsub", function() {
 
         function checkIfDone() {
             if (messages.length < 2) return;
-            assert.equal(confirms, 2, "Expected 2 publish confirms");
+            if (confirms < 2) return;
+
             var msg1 = messages.shift();
             assert.deepPropertyVal(msg1, 'delivery.routing-key', 'key.1');
             assert.deepEqual(msg1.fromJSON(), { message: "body1" });
             var msg2 = messages.shift();
             assert.deepPropertyVal(msg2, 'delivery.routing-key', 'key.2');
             assert.deepEqual(msg2.fromJSON(), { message: "body2" });
+            done();
+        }
+    });
+
+    it("should receive published message with properties", function(done) {
+        var messages = [];
+        var consumer = amqp.createQueueConsumerChannel('qq');
+        consumer.consume(!'ack', 'exclusive', function(msg) {
+            messages.push(msg);
+            checkIfDone();
+        });
+        var publisher = amqp.createPublishChannel();
+        publisher.publish(
+            'xxx', 'key.1',
+            { message: "body1" },
+            {
+                'delivery-mode': 2,
+                'message-id': '123',
+                'headers': {
+                    'stuff': 'can',
+                    'go': 'here'
+                }
+            }
+        );
+        function checkIfDone() {
+            if (messages.length < 1) return;
+
+            var msg1 = messages.shift();
+            assert.deepPropertyVal(msg1, 'delivery.routing-key', 'key.1');
+            assert.deepEqual(msg1.fromJSON(), { message: "body1" });
+            assert.deepPropertyVal(msg1, 'properties.delivery-mode', 2);
+            assert.deepPropertyVal(msg1, 'properties.message-id', '123');
+            done();
+        }
+    });
+
+    it("should receive confirmed published message with properties", function(done) {
+        var messages = [];
+        var consumer = amqp.createQueueConsumerChannel('qq');
+        consumer.consume(!'ack', 'exclusive', function(msg) {
+            messages.push(msg);
+            checkIfDone();
+        });
+        var publisher = amqp.createPublishChannel('confirm');
+        var confirmed = false;
+        publisher.publish(
+            'xxx', 'key.1',
+            { message: "body1" },
+            { 'delivery-mode': 2, 'message-id': '123' },
+            function(err) {
+                if (err) throw err;
+                confirmed = true;
+                checkIfDone();
+            }
+        );
+        function checkIfDone() {
+            if (messages.length < 1) return;
+            if (!confirmed) return;
+
+            var msg1 = messages.shift();
+            assert.deepPropertyVal(msg1, 'delivery.routing-key', 'key.1');
+            assert.deepEqual(msg1.fromJSON(), { message: "body1" });
+            assert.deepPropertyVal(msg1, 'properties.delivery-mode', 2);
+            assert.deepPropertyVal(msg1, 'properties.message-id', '123');
             done();
         }
     });
