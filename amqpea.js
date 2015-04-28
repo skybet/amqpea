@@ -65,6 +65,10 @@ function AMQPConnection(servers, options) {
             amqp.emit.bind(amqp, 'error', new Error('Socket timeout')));
         handle.on('error', amqp.emit.bind(amqp, 'error'));
 
+        socket.on('close', function() {
+            amqp.emit('close');
+        });
+
         amqp.uri = uri;
         amqp.socket = socket;
         amqp.handle = handle;
