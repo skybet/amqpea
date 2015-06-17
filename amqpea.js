@@ -507,8 +507,8 @@ function(queueName, prefetchCount) {
             delivery,
             properties,
             content,
-            function ack() {
-                handle.basic.ack(num, tag, function(err) {
+            function ack(multiple) {
+                handle.basic.ack(num, tag, !!multiple, function(err) {
                     if (err) consumer.emit('error', err);
                 });
             },
