@@ -491,7 +491,7 @@ function(queueName, prefetchCount) {
                 }
             );
             handle.once(num + ':basic.consume-ok', function(ch, method, data) {
-                consumer.tag = data.consumerTag;
+                consumer.tag = data['consumer-tag'];
                 next();
             });
         });
