@@ -160,9 +160,19 @@ Declare a queue on the server.
   * `binding {object}` optional, configure the queue's bindings
     * `exchange {string}` name of the exchange to bind to
     * `keys {array(string)}` which routing keys to bind
+    * `arguments {object}` optional, arguments table passed to queue.bind
+  * `arguments {object}` optional, arguments table passed to queue.declare
 * `callback(err, queue) {function}` Called when queue declaration is confirmed
   * `err {Error}` non-null when an error occurred
   * `queue {object}` Contains `name` as a `{string}`.
+
+declareQueue calls queue.declare followed by queue.bind if the `binding`
+attribute is set in `options`. queue.bind is called once for each key
+in the `binding.keys` array with the `binding.exchange` and `binding.arguments`
+as arguments.
+
+If `binding` is not present in the options or `binding.keys` is empty
+then queue.bind will not be called.
 
 #### amqp.createPublishChannel(confirm) => AMQPPublishChannel
 
@@ -180,7 +190,7 @@ Declare a queue on the server.
 
 `TODO: write this`
 
-#### channel.publish(exchange, key, body, callback)
+#### channel.publish(exchange, key, body, [fields], callback)
 
 `TODO: write this`
 

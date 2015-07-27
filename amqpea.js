@@ -371,19 +371,67 @@ AMQPConnection.prototype.createPublishChannel = function(confirm) {
 function buildProperties(properties, overrides) {
     var built = copy(properties, overrides);
     if (properties.headers) {
-        built.headers = {};
-        Object.keys(properties.headers || {}).forEach(function(k) {
-            built.headers[k] = {
-                type: 'Long string',
-                data: properties.headers[k]
-            };
-        });
+        built.headers = buildTable(built.headers);
     }
+    return built;
+}
+
+/**
+ * buildTable converts an object into the format needed by bramqp's
+ * serializeTable method. The format of which is:
+ * {'type': 'amqp data type', 'value': 'value'}
+ * Data types are defined in: bramqp/lib/valueTypes.js
+ *
+ * Optionally objects in this format can be passed directly for full control
+ * of data types. Otherwise the following mappings are used, which should
+ * handle the most common cases.
+ *
+ * string -> 'Long string'
+ * boolean -> 'Boolean'
+ * int -> 'Signed 64-bit'
+ * float -> '64-bit float'
+ */
+function buildTable(table) {
+    if (typeof table === 'undefined') {
+        return {};
+    }
+
+    var built = copy(table, {});
+    Object.keys(table).forEach(function(k) {
+        var val = table[k];
+        switch (typeof built[k]) {
+            case 'object':
+                // allow user to encode objects in any type they want via object
+                if (typeof val.type === 'string' && typeof val.data !== 'undefined') {
+                    built[k] = val;
+                } else {
+                    throw new Error("Objects in table must have both a type and data attribute");
+                }
+                break;
+            case 'string':
+                built[k] = {type: 'Long string', data: val};
+                break;
+            case 'boolean':
+                built[k] = {type: 'Boolean', data: val};
+                break;
+            case 'number':
+                if (parseInt(val) === val) {
+                    built[k] = {type: 'Signed 64-bit', data: val};
+                } else {
+                    built[k] = {type: '64-bit float', data: val};
+                }
+                break;
+            default:
+                // unhandled field type
+                throw new Error("Unhandled field type for table: " + typeof built[k]);
+        }
+    });
     return built;
 }
 
 AMQPConnection.prototype.declareQueue = function(options, callback) {
     var handle = this.handle;
+
     handle.queue.declare(
         1,
         options.name,
@@ -392,7 +440,7 @@ AMQPConnection.prototype.declareQueue = function(options, callback) {
         !!options.exclusive,
         !!options.autoDelete,
         false, // no wait
-        options.arguments || {},
+        buildTable(options.arguments),
         function(err) {
             if (err) return callback(err);
         }
@@ -407,7 +455,7 @@ AMQPConnection.prototype.declareQueue = function(options, callback) {
                 options.binding.exchange,
                 key,
                 false, //no wait
-                {},
+                buildTable(options.binding.arguments),
                 function(err) {
                     if (err) next(err);
                 }
