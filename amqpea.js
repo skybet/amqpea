@@ -14,6 +14,7 @@ var util = require('util');
 var async = require('async');
 var bramqp = require('bramqp');
 
+var tls = require('tls');
 var connection = require('./lib/connection');
 
 function noOp(){}
@@ -33,6 +34,7 @@ function parseAMQPUri(uri) {
     var auth = (parsedUri.auth || ':').split(':');
     return {
         uri: uri,
+        protocol: parsedUri.protocol,
         host: parsedUri.hostname || 'localhost',
         port: parseInt(parsedUri.port, 10) || 5672,
         login: auth[0] || 'guest',
@@ -146,8 +148,19 @@ function connectToAMQP(server, options, callback) {
         options.timeout || 30000
     );
 
-    if (debug) console.warn("%s:AMQP Connecting to %s:%d", conNum, server.host, server.port);
-    socket = net.connect({host: server.host, port: server.port});
+    if (debug) {
+        console.warn("%s:AMQP Connecting to %s//%s:%d", conNum, server.protocol, server.host,
+                     server.port);
+    }
+
+    if (server.protocol == 'amqp:') {
+        socket = net.connect({host: server.host, port: server.port});
+    } else if (server.protocol == 'amqps:') {
+        socket = tls.connect(copy(options.tls || {}, {host: server.host, port: server.port}));
+    } else {
+        cleanupAndCallback(new Error('Unsupported protocol ' + server.protocol));
+    }
+
     socket.on('timeout', socketTimeout);
     function socketTimeout() {
         cleanupAndCallback(new Error('Socket timed out'));

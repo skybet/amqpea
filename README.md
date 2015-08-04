@@ -92,13 +92,15 @@ Most of these options correspond directly to an AMQP protocol concept, for more 
 Establish a new AMQPConnection instance.
 
 * `urisOrUri {string or array(string)}` Pass one or more AMQP URIs, the first one that works will be connected to.
-  An AMQP uri looks like `amqp://login:password@hostname:port/vhost`.
+  An AMQP uri looks like `amqp://login:password@hostname:port/vhost`. To connect using ssl encryption specify the protocol `amqps://`,
+  additional options (such as certificates) can be passed via `options.tls`.
   Note that if the vhost begins with a `/`, this needs to be URL encoded, so `/default` becomes a URL path of `/%2Fdefault`.
 * `options {object}` Various options to control the client's behaviour
   - `timeout {number}` Number of milliseconds to wait before considering the connection timed out
   - `debug {boolean}` Set to true to log a bunch of debugging messages to STDERR. Can also be enabled by setting the environment variable `NODE_DEBUG_AMQP` to a non-empty value.
   - `heartbeat {boolean or number}` Control the AMQP protocol heartbeat: false for no heartbeats, true to do what the server says, or a number of seconds to override.
   - `client {object}` Send some strings to the server to help identify the client. Allowed keys are `product`, `version`, `platform`, `copyright` and `information`. Product, version and platform default to something useful.
+  - `tls {object}` When connecting via `amqps://` this object will be passed as the options argument to `tls.connect()`, see https://nodejs.org/api/tls.html#tls_tls_connect_options_callback for details. The `host` and `port` attributes are overridden by those specified in the AMQP URI. Note: If an array of URI's is passed to amqpea then all URI's will connect with the same tls options specified here.
 
 ### AMQPConnection
 

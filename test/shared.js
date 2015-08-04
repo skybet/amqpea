@@ -17,7 +17,7 @@ var adminSSLInsecure = !!process.env.AMQP_ADMIN_SSL_INSECURE;
 var debug = !!process.env.NODE_DEBUG_AMQP;
 
 var uriData = {
-    protocol: 'amqp',
+    protocol: 'amqp:',
     slashes: true,
     auth: encodeURIComponent(login) + ':' + encodeURIComponent(password),
     hostname: hostname,
