@@ -241,9 +241,9 @@ Decode a JSON message into an object, may `throw` an `Error`.
 
 Acknowledge the message with the server.
 
-#### msg.ack()
+#### msg.reject()
 
-Reject the message with the server.
+Reject the message from the server (via basic.reject).
 
 
 ## Running the Tests
